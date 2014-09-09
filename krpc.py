@@ -1,0 +1,144 @@
+"""
+The MIT License
+
+Copyright (c) 2014-2015 Fred Stober
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+"""
+
+import time, socket, select, threading, logging
+from bencode import bencode, bdecode
+from utils import client_version, start_thread, AsyncResult, AsyncTimeout, encode_int
+
+krpc_version = client_version[0] + chr(client_version[1]) + chr(client_version[2])
+
+class KRPCError(RuntimeError):
+	pass
+
+class KRPCPeer(object):
+	def __init__(self, connection, handle_query, cleanup_timeout = 60, cleanup_interval = 10):
+		""" Start listening on the connection given by (addr, port)
+			Incoming messages are given to the handle_query function,
+			with arguments (send_krpc_response, rec).
+			send_krpc_response(**kwargs) is a function to send a reply,
+			rec contains the dictionary with the incoming message.
+		"""
+		self._log = logging.getLogger(self.__class__.__name__)
+		self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+		self._sock.setblocking(0)
+		self._sock.bind(connection)
+
+		self._transaction = {}
+		self._transaction_id = 0
+		self._transaction_lock = threading.Lock()
+		self._handle_query = handle_query
+
+		self._shutdown_flag = False
+		self._listen_thread = start_thread(self._listen)
+		self._cleanup_thread = start_thread(self._cleanup_transactions,
+			timeout = cleanup_timeout, interval = cleanup_interval)
+
+	def shutdown(self):
+		""" This function allows to cleanly shutdown the KRPCPeer. """
+		self._shutdown_flag = True
+
+	def _cleanup_transactions(self, timeout = 60, interval = 10):
+		while not self._shutdown_flag:
+			# Remove transactions older than 1min
+			with self._transaction_lock:
+				timeout_transactions = list(filter(lambda t: self._transaction[t].get_age() > timeout, self._transaction))
+				if self._log.isEnabledFor(logging.DEBUG):
+					self._log.debug('Transactions: %d id=%d timeout=%d' % (len(self._transaction), self._transaction_id, len(timeout_transactions)))
+				for t in timeout_transactions:
+					self._transaction.pop(t).set_result(AsyncTimeout('Transaction %r: timeout' % t))
+			time.sleep(interval)
+
+	def _listen(self):
+		while not self._shutdown_flag:
+			try:
+				if select.select([self._sock], [], [], 10)[0]:
+					(encoded_rec, source_connection) = self._sock.recvfrom(64*1024)
+					try:
+						rec = bdecode(encoded_rec)
+					except:
+						self._log.exception('Exception while parsing KRPC requests from %r:\n\t%r' % (source_connection, encoded_rec))
+						continue
+					if rec['y'] in ['r', 'e']: # Response / Error message
+						t = rec['t']
+						if rec['y'] == 'e':
+							if self._log.isEnabledFor(logging.DEBUG):
+								self._log.debug('KRPC error message from %r:\n\t%r' % (source_connection, rec))
+							rec = KRPCError('Error while processing transaction %r:\n\t%r' % (t, rec))
+						else:
+							if self._log.isEnabledFor(logging.DEBUG):
+								self._log.debug('KRPC answer from %r:\n\t%r' % (source_connection, rec))
+						with self._transaction_lock:
+							if self._transaction.get(t):
+								self._transaction.pop(t).set_result(rec, source = source_connection)
+							elif self._log.isEnabledFor(logging.INFO):
+								self._log.info('Received response from %r without associated transaction:\n%r' % (source_connection, rec))
+					elif rec['y'] == 'q':
+						if self._log.isEnabledFor(logging.DEBUG):
+							self._log.debug('KRPC request from %r:\n\t%r' % (source_connection, rec))
+						send_krpc_response = lambda message, top_level_message = {}:\
+							self._send_krpc_response(source_connection, rec.pop('t'), message, top_level_message)
+						self._handle_query(send_krpc_response, rec, source_connection)
+					else:
+						if self._log.isEnabledFor(logging.INFO):
+							self._log.info('Unknown type of KRPC message from %r:\n\t%r' % (source_connection, rec))
+			except Exception:
+				self._log.exception('Exception while handling KRPC requests from %r:\n\t%r' % (source_connection, rec))
+		self._sock.close()
+
+	def _send_krpc_response(self, source_connection, remote_transaction, message, top_level_message = {}):
+		with self._transaction_lock:
+			resp = {'y': 'r', 't': remote_transaction, 'v': krpc_version, 'r': message}
+			resp.update(top_level_message)
+			if self._log.isEnabledFor(logging.DEBUG):
+				self._log.debug('KRPC response to %r:\n\t%r' % (source_connection, resp))
+			self._sock.sendto(bencode(resp), source_connection)
+
+	def send_krpc_query(self, target_connection, method, **kwargs):
+		""" Invoke method on the node at target_connection.
+			The arguments for the method are given in kwargs.
+			Returns an AsyncResult (waitable) that will
+			eventually contain the peer response.
+		"""
+		target_connection = (socket.gethostbyname(target_connection[0]), target_connection[1])
+		with self._transaction_lock:
+			while True: # Generate transaction id
+				self._transaction_id += 1
+				local_transaction = encode_int(self._transaction_id).lstrip('\x00')
+				if local_transaction not in self._transaction:
+					break
+			req = {'y': 'q', 't': local_transaction, 'v': krpc_version, 'q': method, 'a': kwargs}
+			self._transaction[local_transaction] = AsyncResult(source = (method, kwargs, target_connection))
+			if self._log.isEnabledFor(logging.DEBUG):
+				self._log.debug('KRPC request to %r:\n\t%r' % (target_connection, req))
+			self._sock.sendto(bencode(req), target_connection)
+			return self._transaction[local_transaction]
+
+
+if __name__ == '__main__':
+	logging.basicConfig()
+	logging.getLogger().setLevel(logging.INFO)
+	# Implement an echo message
+	peer = KRPCPeer(('0.0.0.0', 1111), handle_query = lambda send_krpc_response, rec, source_connection:
+		send_krpc_response(message = 'Hello %s!' % rec['a']['message']))
+	print peer.send_krpc_query(('localhost', 1111), 'echo', message = 'World').get_result(2)
