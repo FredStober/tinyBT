@@ -14,5 +14,6 @@ script:
   - coverage run -a crc32c.py
   - coverage run -a krpc.py
   - coverage run -a dht.py
+  - coverage run -a tracker.py
 after_success:
   - codecov
