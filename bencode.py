@@ -1,129 +1,115 @@
-# The contents of this file are subject to the BitTorrent Open Source License
-# Version 1.1 (the License).  You may not copy or use this file, in either
-# source code or executable form, except in compliance with the License.  You
-# may obtain a copy of the License at http://www.bittorrent.com/license/.
-#
-# Software distributed under the License is distributed on an AS IS basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied.  See the License
-# for the specific language governing rights and limitations under the
-# License.
+"""
+The MIT License
 
-# Written by Petru Paler
+Copyright (c) 2015 Fred Stober
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+"""
 
 class BTFailure(Exception):
-    pass
+	pass
 
-def decode_int(x, f):
-    f += 1
-    newf = x.index('e', f)
-    n = int(x[f:newf])
-    if x[f] == '-':
-        if x[f + 1] == '0':
-            raise ValueError
-    elif x[f] == '0' and newf != f+1:
-        raise ValueError
-    return (n, newf+1)
+# Encoding functions ##############################################
 
-def decode_string(x, f):
-    colon = x.index(':', f)
-    n = int(x[f:colon])
-    if x[f] == '0' and colon != f+1:
-        raise ValueError
-    colon += 1
-    return (x[colon:colon+n], colon+n)
+import sys
+if sys.version_info.major >= 3:
+	str_to_bytes = lambda x: x.encode('ascii')
+else:
+	str_to_bytes = lambda x: x
 
-def decode_list(x, f):
-    r, f = [], f+1
-    while x[f] != 'e':
-        v, f = decode_func[x[f]](x, f)
-        r.append(v)
-    return (r, f + 1)
-
-def decode_dict(x, f):
-    r, f = {}, f+1
-    while x[f] != 'e':
-        k, f = decode_string(x, f)
-        r[k], f = decode_func[x[f]](x, f)
-    return (r, f + 1)
-
-decode_func = {}
-decode_func['l'] = decode_list
-decode_func['d'] = decode_dict
-decode_func['i'] = decode_int
-decode_func['0'] = decode_string
-decode_func['1'] = decode_string
-decode_func['2'] = decode_string
-decode_func['3'] = decode_string
-decode_func['4'] = decode_string
-decode_func['5'] = decode_string
-decode_func['6'] = decode_string
-decode_func['7'] = decode_string
-decode_func['8'] = decode_string
-decode_func['9'] = decode_string
-
-def bdecode(x):
-    try:
-        r, l = decode_func[x[0]](x, 0)
-    except (IndexError, KeyError, ValueError):
-        raise BTFailure("not a valid bencoded string")
-    if l != len(x):
-        raise BTFailure("invalid bencoded value (data after valid prefix)")
-    return r
-
-from types import StringType, IntType, LongType, DictType, ListType, TupleType
-
-
-class Bencached(object):
-    __slots__ = ['bencoded']
-    def __init__(self, s):
-        self.bencoded = s
-
-def encode_bencached(x,r):
-    r.append(x.bencoded)
-
-def encode_int(x, r):
-    r.extend(('i', str(x), 'e'))
-
-def encode_bool(x, r):
-    if x:
-        encode_int(1, r)
-    else:
-        encode_int(0, r)
-
-def encode_string(x, r):
-    r.extend((str(len(x)), ':', x))
-
-def encode_list(x, r):
-    r.append('l')
-    for i in x:
-        encode_func[type(i)](i, r)
-    r.append('e')
-
-def encode_dict(x,r):
-    r.append('d')
-    ilist = x.items()
-    ilist.sort()
-    for k, v in ilist:
-        r.extend((str(len(k)), ':', k))
-        encode_func[type(v)](v, r)
-    r.append('e')
-
-encode_func = {}
-encode_func[Bencached] = encode_bencached
-encode_func[IntType] = encode_int
-encode_func[LongType] = encode_int
-encode_func[StringType] = encode_string
-encode_func[ListType] = encode_list
-encode_func[TupleType] = encode_list
-encode_func[DictType] = encode_dict
-
-try:
-    from types import BooleanType
-    encode_func[BooleanType] = encode_bool
-except ImportError:
-    pass
+def bencode_proc(result, x):
+	t = type(x)
+	if t == str:
+		result.extend((str_to_bytes(str(len(x))), b':', str_to_bytes(x)))
+	elif t == bytes:
+		result.extend((str_to_bytes(str(len(x))), b':', x))
+	elif t == int:
+		result.extend((b'i', str_to_bytes(str(x)), b'e'))
+	elif t == dict:
+		result.append(b'd')
+		for k, v in sorted(x.items()):
+			bencode_proc(result, k)
+			bencode_proc(result, v)
+		result.append(b'e')
+	elif t == list:
+		result.append(b'l')
+		for item in x:
+			bencode_proc(result, item)
+		result.append(b'e')
 
 def bencode(x):
-    r = []
-    encode_func[type(x)](x, r)
-    return ''.join(r)
+	result = []
+	bencode_proc(result, x)
+	return b''.join(result)
+
+# Decoding functions ##############################################
+
+bdecode_marker_int = ord('i')
+bdecode_marker_str_min = ord('0')
+bdecode_marker_str_max = ord('9')
+bdecode_marker_list = ord('l')
+bdecode_marker_dict = ord('d')
+bdecode_marker_end = ord('e')
+
+def bdecode_proc(msg, pos):
+	t = msg[pos]
+	if t == bdecode_marker_int:
+		pos += 1
+		pos_end = msg.index(b'e', pos)
+		return (int(msg[pos:pos_end]), pos_end + 1)
+	elif t >= bdecode_marker_str_min and t <= bdecode_marker_str_max:
+		sep = msg.index(b':', pos)
+		n = int(msg[pos:sep])
+		sep += 1
+		return (bytes(msg[sep:sep + n]), sep + n)
+	elif t == bdecode_marker_dict:
+		result = {}
+		pos += 1
+		while msg[pos] != bdecode_marker_end:
+			k, pos = bdecode_proc(msg, pos)
+			result[k], pos = bdecode_proc(msg, pos)
+		return (result, pos + 1)
+	elif t == bdecode_marker_list:
+		result = []
+		pos += 1
+		while msg[pos] != bdecode_marker_end:
+			v, pos = bdecode_proc(msg, pos)
+			result.append(v)
+		return (result, pos + 1)
+
+def bdecode_extra(msg):
+	try:
+		result, pos = bdecode_proc(bytearray(msg), 0)
+	except (IndexError, KeyError, ValueError):
+		raise BTFailure("invalid bencoded data! %r" % msg)
+	return (result, pos)
+
+def bdecode(msg):
+	try:
+		result, pos = bdecode_extra(msg)
+	except (IndexError, KeyError, ValueError):
+		raise BTFailure("invalid bencoded data: %r" % msg)
+	if pos != len(msg):
+		raise BTFailure("invalid bencoded value (data after valid prefix)")
+	return result
+
+if __name__ == '__main__':
+	test = {b'k1': 145, b'k2': {b'sk1': list(range(10)), b'sk2': b'0'*60}}
+	for x in range(100000):
+		assert(bdecode(bencode(test)) == test)

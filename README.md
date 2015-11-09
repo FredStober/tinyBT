@@ -41,19 +41,20 @@ an async result holder with the unprocessed data from the remote host:
 In addition, some additional helper functions are made available - these
 functions take care of updating the routing table and are blocking calls with
 a user specified timeout:
-  - dht_ping(connection, timeout = 1)
+  - dht_ping(connection, timeout = 5)
       Returns the complete result dictionary of the call.
-  - dht_find_node(search_id, timeout = 120)
+  - dht_find_node(search_id, timeout = 5, retries = 2)
       Searches iteratively for nodes with the given id
       and yields the connection tuple if found.
-  - dht_get_peers(info_hash, timeout = 120)
+  - dht_get_peers(info_hash, timeout = 5, retries = 2)
       Searches iteratively for nodes with the given info_hash
       and yields the connection tuple if found.
-  - dht_announce_peer(info_hash)
+  - dht_announce_peer(info_hash, implied_port = 1)
       Registers the availabilty of the info_hash on this node
       to all peers that supplied a token while searching for it.
 
-The final two functions are used to start and shutdown the local DHT Peer:
+The final three functions are used to start and shutdown the local DHT Peer
+and allow access to the discovered external connection infos:
   - __init__(listen_connection, bootstrap_connection = ('router.bittorrent.com', 6881),
              setup = {'report_t': 10, 'check_t': 30, 'check_N': 10, 'discover_t': 180})
       The constructor needs to know what address and port to listen on and which node to use
@@ -61,3 +62,5 @@ The final two functions are used to start and shutdown the local DHT Peer:
       threads can be configured as well.
   - shutdown()
       Start shutdown of the local DHT peer and all associated maintainance threads.
+  - get_external_connection()
+      Return the discovered external connection infos
