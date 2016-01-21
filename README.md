@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.org/FredStober/tinyBT.svg?branch=master)](https://travis-ci.org/FredStober/tinyBT)
+[![Coverage](https://codecov.io/github/FredStober/tinyBT/coverage.svg?branch=master)](https://codecov.io/github/FredStober/tinyBT?branch=master)
+
 tiny Bittorrent client
 ======================
 
@@ -55,11 +58,15 @@ a user specified timeout:
 
 The final three functions are used to start and shutdown the local DHT Peer
 and allow access to the discovered external connection infos:
+
   - __init__(listen_connection, bootstrap_connection = ('router.bittorrent.com', 6881),
-             setup = {'report_t': 10, 'check_t': 30, 'check_N': 10, 'discover_t': 180})
+             user_setup = {}, user_router = None)
       The constructor needs to know what address and port to listen on and which node to use
       as a bootstrap node. The run interval and some other parameters of the maintainance
-      threads can be configured as well.
+      threads can be configured as well via the user_setup parameter. The default values are:
+      {'discover_t': 180, 'check_t': 30, 'check_N': 10}.
+      It is possible to provide a user implemntation for the DHT node router with the user_router
+      parameter
   - shutdown()
       Start shutdown of the local DHT peer and all associated maintainance threads.
   - get_external_connection()

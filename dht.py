@@ -468,7 +468,7 @@ if __name__ == '__main__':
 			break
 
 	import binascii
-	info_hash = binascii.unhexlify('cb84ccc10f296df72d6c40ba7a07c178a4323a14') # Ubuntu 14.04 info hash
+	info_hash = binascii.unhexlify('ae3fa25614b753118931373f8feae64f3c75f5cd') # Ubuntu 15.10 info hash
 
 	log.critical('starting "get_peers" test')
 	for idx, peer in enumerate(dht5.dht_get_peers(info_hash)):

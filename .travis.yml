@@ -1,0 +1,18 @@
+language: python
+sudo: false
+python:
+  - "2.7"
+  - "3.3"
+  - "3.4"
+  - "3.5"
+  - "pypy"
+before_install:
+  - pip install codecov
+  - pip install 'coverage<4'
+script:
+  - coverage run -a bencode.py
+  - coverage run -a crc32c.py
+  - coverage run -a krpc.py
+  - coverage run -a dht.py
+after_success:
+  - codecov

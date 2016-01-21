@@ -28,7 +28,7 @@ class BTFailure(Exception):
 # Encoding functions ##############################################
 
 import sys
-if sys.version_info.major >= 3:
+if sys.version_info[0] >= 3:
 	str_to_bytes = lambda x: x.encode('ascii')
 else:
 	str_to_bytes = lambda x: x
