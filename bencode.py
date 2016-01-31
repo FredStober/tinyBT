@@ -92,6 +92,7 @@ def bdecode_proc(msg, pos):
 			v, pos = bdecode_proc(msg, pos)
 			result.append(v)
 		return (result, pos + 1)
+	raise BTFailure("invalid bencoded data (invalid token)! %r" % msg)
 
 def bdecode_extra(msg):
 	try:
@@ -110,6 +111,13 @@ def bdecode(msg):
 	return result
 
 if __name__ == '__main__':
+	import logging
+	logging.basicConfig()
 	test = {b'k1': 145, b'k2': {b'sk1': list(range(10)), b'sk2': b'0'*60}}
-	for x in range(100000):
+	for x in range(100):
 		assert(bdecode(bencode(test)) == test)
+	for test_bytes in [b'd5:keyi0ee', b'x3:keyi0ee', b'd3:keyi0ee...']:
+		try:
+			bdecode(test_bytes)
+		except BTFailure as ex:
+			logging.exception('expected bdecode exception')

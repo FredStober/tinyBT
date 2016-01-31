@@ -185,6 +185,8 @@ class NetworkSocket(object):
 	def close(self):
 		with self._lock:
 			self._threads.shutdown()
+			self._send_queue.clear()
+			self._recv_queue.clear()
 			self._send_event.set()
 			self._recv_event.set()
 		self._close()

@@ -156,10 +156,20 @@ class KRPCPeer(object):
 
 if __name__ == '__main__':
 	logging.basicConfig()
-	logging.getLogger().setLevel(logging.INFO)
+	logging.getLogger().setLevel(logging.DEBUG)
 	# Implement an echo message
 	peer = KRPCPeer(('0.0.0.0', 1111), handle_query = lambda send_krpc_response, rec, source_connection:
 		send_krpc_response(message = 'Hello %s!' % rec[b'a'][b'message']))
 	query = peer.send_krpc_query(('localhost', 1111), 'echo', message = 'World')
 	logging.getLogger().critical('result = %r' % query.get_result(2))
+	query1 = peer.send_krpc_query(('localhost', 1111), 'echo', message = 'World')
 	peer.shutdown()
+	query2 = peer.send_krpc_query(('localhost', 1111), 'echo', message = 'World')
+	try:
+		query1.get_result()
+	except Exception:
+		logging.exception('expected query exception')
+	try:
+		query2.get_result()
+	except Exception:
+		logging.exception('expected query exception')
