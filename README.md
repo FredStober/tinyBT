@@ -13,7 +13,7 @@ a single component.
 
   - krpc.py    - implements the basic UDP Kademila-RPC protocol layer
   - dht.py     - contains the code for accessing the Mainline DHT using KRPC
-
+  - tracker.py - implements the UDP and HTTP tracker protocol for peer discovery
 
 KRPC Implementation
 -------------------
@@ -71,3 +71,21 @@ and allow access to the discovered external connection infos:
       Start shutdown of the local DHT peer and all associated maintainance threads.
   - get_external_connection()
       Return the discovered external connection infos
+
+
+Tracker Implementation
+----------------------
+
+The tracker implementation provides functions to get the list of peers for a certain info_hash from
+a HTTP or UDP tracker. Each function returns a list of connection tuples with possible peers for
+the given info hash. The three non-optional parameters are the tracker url, info_hash and peer_id.
+Optionally it is possible to provide the peer ip and peer port, the amount already uploaded and downloaded
+as well as the amount left to download and the occasion / event of the request. This event can be
+either 'started', 'stopped', 'completed' or 'empty' (for regular queries).
+
+  - http_get_peers(tracker_url, info_hash, peer_id, ip = '0.0.0.0', port = 0,
+                  uploaded = 0, downloaded = 0, left = 0, event = 'started')
+  - udp_get_peers(tracker_url, info_hash, peer_id, ip = '0.0.0.0', port = 0,
+                  uploaded = 0, downloaded = 0, left = 0, event = 'started', num_want = -1, key = 0)
+      With num_want it is possible to tell the tracker who many peers should be sent. The parameter key
+      should be a unique key that is randomized by the client.

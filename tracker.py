@@ -51,9 +51,9 @@ def decode_connections(data):
 		data = data[6:]
 
 # Implementation of BEP #0015 (UDP tracker protocol)
-def udp_announce(tracker_url, info_hash, peer_id, ip = '0.0.0.0', port = 0, event = None,
-		num_want = -1, downloaded = 0, uploaded = 0, left = 0, key = 0):
-	event = {None: 0, 'completed': 1, 'started': 2, 'stopped': 3}[event]
+def udp_get_peers(tracker_url, info_hash, peer_id, ip = '0.0.0.0', port = 0,
+		uploaded = 0, downloaded = 0, left = 0, event = 'started', num_want = -1, key = 0):
+	event = {'empty': 0, 'completed': 1, 'started': 2, 'stopped': 3}[event]
 	url = parse_url(tracker_url)
 	conn = (socket.gethostbyname(url.hostname), url.port)
 	sock = UDPSocket(('0.0.0.0', 0))
@@ -117,8 +117,8 @@ def udp_announce(tracker_url, info_hash, peer_id, ip = '0.0.0.0', port = 0, even
 		sock.close()
 
 # Implementation of BEP #0003 (Bittorrent - section: HTTP Tracker protocol)
-def http_announce(tracker_url, info_hash, peer_id, ip = '0.0.0.0', port = 0, event = 'started',
-		uploaded = 0, downloaded = 0, left = 0):
+def http_get_peers(tracker_url, info_hash, peer_id, ip = '0.0.0.0', port = 0,
+		uploaded = 0, downloaded = 0, left = 0, event = 'started'):
 	query = {b'info_hash': info_hash, b'peer_id': peer_id, b'ip': ip, b'port': port,
 		b'uploaded': uploaded, b'downloaded': downloaded, b'left': left, b'compact': 1}
 	if event:
@@ -132,5 +132,5 @@ if __name__ == '__main__':
 	import os, binascii
 	peer_id = os.urandom(20)
 	info_hash = binascii.unhexlify('ae3fa25614b753118931373f8feae64f3c75f5cd') # Ubuntu 15.10 info hash
-	print(http_announce('http://torrent.ubuntu.com:6969/announce', info_hash, peer_id))
-	print(udp_announce('udp://tracker.openbittorrent.com:80', info_hash, peer_id))
+	print(http_get_peers('http://torrent.ubuntu.com:6969/announce', info_hash, peer_id))
+	print(udp_get_peers('udp://tracker.openbittorrent.com:80', info_hash, peer_id))
