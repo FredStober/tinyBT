@@ -129,8 +129,14 @@ def http_get_peers(tracker_url, info_hash, peer_id, ip = '0.0.0.0', port = 0,
 		return list(decode_connections(decoded[b'peers']))
 
 if __name__ == '__main__':
-	import os, binascii
+	import os, binascii, logging
 	peer_id = os.urandom(20)
 	info_hash = binascii.unhexlify('ae3fa25614b753118931373f8feae64f3c75f5cd') # Ubuntu 15.10 info hash
-	print(http_get_peers('http://torrent.ubuntu.com:6969/announce', info_hash, peer_id))
-	print(udp_get_peers('udp://tracker.openbittorrent.com:80', info_hash, peer_id))
+	try:
+		print(http_get_peers('http://torrent.ubuntu.com:6969/announce', info_hash, peer_id))
+	except Exception:
+		logging.exception('Exception during http query')
+	try:
+		print(udp_get_peers('udp://tracker.coppersurfer.tk:6969', info_hash, peer_id))
+	except Exception:
+		logging.exception('Exception during udp query')

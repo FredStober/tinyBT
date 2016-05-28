@@ -87,5 +87,5 @@ either 'started', 'stopped', 'completed' or 'empty' (for regular queries).
                   uploaded = 0, downloaded = 0, left = 0, event = 'started')
   - udp_get_peers(tracker_url, info_hash, peer_id, ip = '0.0.0.0', port = 0,
                   uploaded = 0, downloaded = 0, left = 0, event = 'started', num_want = -1, key = 0)
-      With num_want it is possible to tell the tracker who many peers should be sent. The parameter key
+      With num_want it is possible to tell the tracker how many peers should be sent. The parameter key
       should be a unique key that is randomized by the client.
