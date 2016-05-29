@@ -28,6 +28,9 @@ from utils import UDPSocket, encode_int32, decode_connection
 from utils import encode_ip, encode_uint64, encode_uint32, encode_uint16
 from utils import decode_ip, decode_uint64, decode_uint32
 
+class TrackerException(Exception):
+	pass
+
 if sys.version_info[0] >= 3:
 	import urllib.request, urllib.parse, urllib.error, urllib.parse
 	def parse_url(url):
@@ -59,12 +62,15 @@ def udp_get_peers(tracker_url, info_hash, peer_id, ip = '0.0.0.0', port = 0,
 	sock = UDPSocket(('0.0.0.0', 0))
 
 	def recv():
-		timeout = 30
+		timeout = 5
 		while True:
-			data, src = sock.recvfrom(timeout)
+			try:
+				data, src = sock.recvfrom(timeout)
+			except:
+				data = None
 			if not data:
 				timeout *= 2
-				if timeout > 3840:
+				if timeout > 60:
 					break
 				continue
 			try:
@@ -74,8 +80,7 @@ def udp_get_peers(tracker_url, info_hash, peer_id, ip = '0.0.0.0', port = 0,
 				return (action, remote_tid, data[8:])
 			except:
 				raise
-				break
-		return (None, None, None, None)
+		return (None, None, None)
 
 	def perform_announce():
 		cid = 0x41727101980
@@ -87,6 +92,8 @@ def udp_get_peers(tracker_url, info_hash, peer_id, ip = '0.0.0.0', port = 0,
 			req = encode_uint64(cid) + encode_uint32(action_connect) + encode_uint32(tid)
 			sock.sendto(req, conn)
 			(action, remote_tid, data) = recv()
+			if not data:
+				raise TrackerException('Tracker %s:%d did not answer to handshake' % conn)
 			remote_cid = decode_uint64(data[0:8])
 			if action != action_connect:
 				remote_tid = None
@@ -103,6 +110,8 @@ def udp_get_peers(tracker_url, info_hash, peer_id, ip = '0.0.0.0', port = 0,
 				encode_uint32(event) + encode_ip(ip) + encode_uint32(key) + encode_int32(num_want) + encode_uint16(port)
 			sock.sendto(req, conn)
 			(action, remote_tid, data) = recv()
+			if not data:
+				raise TrackerException('Tracker %s:%d did not answer to query' % conn)
 			if action != action_announce:
 				remote_tid = None
 
@@ -126,7 +135,9 @@ def http_get_peers(tracker_url, info_hash, peer_id, ip = '0.0.0.0', port = 0,
 	handle = open_url(tracker_url, query)
 	if handle.getcode() == 200:
 		decoded = bdecode(handle.read())
-		return list(decode_connections(decoded[b'peers']))
+		if not b'peers' in decoded:
+			raise TrackerException(decoded.get(b'failure reason', 'Unknown failure'))
+		return list(decode_connections(decoded.get(b'peers', '')))
 
 if __name__ == '__main__':
 	import os, binascii, logging
